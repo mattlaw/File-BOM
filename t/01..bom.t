@@ -13,137 +13,173 @@ use Fcntl qw( :seek );
 
 our @encodings;
 BEGIN {
-  # encodings to use in unseekable test
-  @encodings = qw( UTF-8 UTF-16LE UTF-16BE UTF-32LE UTF-32BE );
+    # encodings to use in unseekable test
+    @encodings = qw( UTF-8 UTF-16LE UTF-16BE UTF-32LE UTF-32BE );
 
-  plan tests => 11 + (@test_files * 12) + (@encodings * 2);
+    plan tests => 11 + (@test_files * 14) + (@encodings * 4);
 
-  use_ok("File::BOM", ':all');
+    use_ok("File::BOM", ':all');
 }
 
+# Ignore known harmless warning
+local $SIG{__WARN__} = sub {
+    my $warning = "@_";
+    if ($warning !~ /^UTF-(?:16|32)LE:Partial character/) {
+	warn $warning;
+    }
+};
 
 for my $file (@test_files) {
-  ok(*FH = open_bom($file2path{$file}), "$file: open_bom returned filehandle");
-  my $expect = $filecontent{$file};
+    is(open_bom(FH, $file2path{$file}), $file2enc{$file}, "$file: open_bom returned encoding");
+    my $expect = $filecontent{$file};
 
-  my $line = <FH>;
-  chomp $line;
+    my $line = <FH>;
+    chomp $line;
 
-  is($line, $expect, "$file: test content returned OK");
+    is($line, $expect, "$file: test content returned OK");
 
-  close FH;
+    close FH;
 
-  open FH, '<:bytes', $file2path{$file};
-  my $first_line = <FH>;
-  chomp $first_line;
+    {
+	# test defuse
+	open BOMB, '<', $file2path{$file}
+	    or die "Couldn't read '$file2path{$file}': $!";
 
-  seek(FH, 0, SEEK_SET);
+	my $enc = defuse(BOMB);
+	is($enc, $file2enc{$file}, "$file: defuse returns correct encoding ($enc)");
+	$line = <BOMB>;
+	chomp $line;
+	is($line, $expect, "$file: defused version content OK");
 
-  is(get_encoding_from_filehandle(*FH), $file2enc{$file}, "$file: get_encoding_from_filehandle returned correct encoding");
+	close BOMB;
+    }
 
-  my($enc, $offset) = get_encoding_from_bom($first_line);
-  is($enc, $file2enc{$file}, "$file: get_encoding_from_bom also worked");
+    open FH, '<', $file2path{$file};
+    my $first_line = <FH>;
+    chomp $first_line;
 
-  {
-    my $decoded = $enc ? decode($enc, substr($first_line, $offset)) 
-		       : $first_line;
+    seek(FH, 0, SEEK_SET);
 
-    is($decoded, $expect, "$file: .. and offset worked with substr()");
-  }
+    is(get_encoding_from_filehandle(FH), $file2enc{$file}, "$file: get_encoding_from_filehandle returned correct encoding");
 
-  #
-  # decode_from_bom()
-  #
-  is(decode_from_bom($first_line, 'UTF-8', Encode::FB_CROAK), $expect, "$file: decode_from_bom() scalar context");
-  {
-    # with default
-    my $default = 'UTF-8';
-    my $expect_enc = $file2enc{$file} || $default;
+    my($enc, $offset) = get_encoding_from_bom($first_line);
+    is($enc, $file2enc{$file}, "$file: get_encoding_from_bom also worked");
 
-    my($decoded, $got_enc) = decode_from_bom($first_line, $default, Encode::FB_CROAK);
+    {
+	my $decoded = $enc ? decode($enc, substr($first_line, $offset)) 
+			   : $first_line;
 
-    is($decoded, $expect,      "$file: decode_from_bom() list context");
-    is($got_enc, $expect_enc, "$file: decode_from_bom() list context encoding");
-  }
-  {
-    # without default
-    my $expect_enc = $file2enc{$file};
-    my($decoded, $got_enc) = decode_from_bom($first_line, undef, Encode::FB_CROAK);
+	is($decoded, $expect, "$file: .. and offset worked with substr()");
+    }
 
-    is($decoded, $expect,      "$file: decode_from_bom() list context, no default");
-    is($got_enc, $expect_enc, "$file: decode_from_bom() list context encoding, no default");
-  }
+    #
+    # decode_from_bom()
+    #
+    is(decode_from_bom($first_line, 'UTF-8', Encode::FB_CROAK), $expect, "$file: decode_from_bom() scalar context");
+    {
+	# with default
+	my $default = 'UTF-8';
+	my $expect_enc = $file2enc{$file} || $default;
 
-  seek(FH, 0, SEEK_SET);
+	my($decoded, $got_enc) = decode_from_bom($first_line, $default, Encode::FB_CROAK);
 
-  ($enc, my $spill) = get_encoding_from_stream(*FH);
+	is($decoded, $expect,      "$file: decode_from_bom() list context");
+	is($got_enc, $expect_enc,  "$file: decode_from_bom() list context encoding");
+    }
+    {
+	# without default
+	my $expect_enc = $file2enc{$file};
+	my($decoded, $got_enc) = decode_from_bom($first_line, undef, Encode::FB_CROAK);
 
-  $line = <FH>; chomp $line;
+	is($decoded, $expect,      "$file: decode_from_bom() list context, no default");
+	is($got_enc, $expect_enc,  "$file: decode_from_bom() list context encoding, no default");
+    }
 
-  is($enc, $file2enc{$file}, "$file: get_encoding_from_stream()");
+    seek(FH, 0, SEEK_SET);
 
-  $line = $spill . $line;
+    ($enc, my $spill) = get_encoding_from_stream(FH);
 
-  $line = decode($enc, $line) if $enc;
+    $line = <FH>; chomp $line;
 
-  is($line, $expect, "$file: read OK after get_encoding_from_stream");
+    is($enc, $file2enc{$file}, "$file: get_encoding_from_stream()");
 
-  close FH;
+    $line = $spill . $line;
+    $line = decode($enc, $line) if $enc;
+
+    is($line, $expect, "$file: read OK after get_encoding_from_stream");
+
+    close FH;
 }
 
 # Test unseekable
 SKIP: {
-  skip "mkfifo not supported on this platform", (2 * @encodings)
-      unless $fifo_supported;
+    skip "mkfifo not supported on this platform", (4 * @encodings)
+	unless $fifo_supported;
 
-  for my $encoding (@encodings) {
-    my $expected = my $test = "Testing \x{2170}, \x{2171}, \x{2172}\n";
-    my $bytes = join('', $enc2bom{$encoding}, encode($encoding, $test, Encode::FB_CROAK));
+    for my $encoding (@encodings) {
+	my $expected = my $test = "Testing \x{2170}, \x{2171}, \x{2172}\n";
+	my $bytes = $enc2bom{$encoding}.encode($encoding, $test, Encode::FB_CROAK);
 
-    my($pid, $fifo) = write_fifo($bytes);
+	my($pid, $fifo, $enc, $spill, $result);
 
-    my($fh, $enc, $spill) = open_bom($fifo, undef, 1);
-    my $result = $spill . <$fh>;
+	($pid, $fifo) = write_fifo($bytes);
+	($enc, $spill) = open_bom(my $fh, $fifo);
+	$result = $spill . <$fh>;
 
-    close $fh;
-    waitpid($pid, 0);
-    unlink $fifo;
+	close $fh;
+	waitpid($pid, 0);
+	unlink $fifo;
 
-    is($enc, $encoding,	 "Read BOM correctly in unseekable $encoding file");
-    is($result, $expected, "Read $encoding data from unseekable source");
-  }
+	is($enc, $encoding,    "Read BOM correctly in unseekable $encoding file");
+	is($result, $expected, "Read $encoding data from unseekable source");
+
+	# Now test defuse too
+	($pid, $fifo) = write_fifo($bytes);
+	open($fh, '<:utf8', $fifo) or die "Couldn't read '$fifo': $!";
+	($enc, $spill) = defuse $fh;
+	$result = $spill . <$fh>;
+
+	close $fh;
+	waitpid($pid, 0);
+	unlink $fifo;
+
+	is($enc, $encoding, "defused fifo OK ($encoding)");
+	is($result, $expected, "read defused fifo OK ($encoding)")
+	or diag(
+	    "Hex dump:\n".
+	    "Got:      ". hexdump($result) ."\n".
+	    "Expected: ". hexdump($expected) ."\n".
+	    "Spillage: ". hexdump($spill)
+	);
+    }
 }
 
 # Test broken BOM
 {
-  my $broken_content = "\xff\xffThis file has a broken BOM";
-  my $broken_file = 't/data/broken_bom.txt';
-  my($fh, $enc, $spill) = open_bom($broken_file);
-  is($enc, '', "open_bom on file with broken BOM has no encoding");
-  {
-    my $line = <$fh>;
-    chomp $line;
-    is($line, $broken_content, "handle with broken BOM returns as expected");
-  }
-
-SKIP: {
-    skip "mkfifo not supported on this platform", 3
-	unless $fifo_supported;
-    my($pid, $fifo) = write_fifo($broken_content);
-    if (open my $fh, '<', $fifo) {
-      my($enc, $spill) = get_encoding_from_filehandle($fh);
-      is($enc, '', "get_encoding_from_filehandle() on unseekable file broken bom");
-      ok($spill, ".. spillage was produced");
-      is($spill . <$fh>, $broken_content, "spillage + content as expected");
-      close $fh;
-    }
-    else {
-      fail(3);
+    my $broken_content = "\xff\xffThis file has a broken BOM";
+    my $broken_file = 't/data/broken_bom.txt';
+    my($enc, $spill) = open_bom(my $fh, $broken_file);
+    is($enc, '', "open_bom on file with broken BOM has no encoding");
+    {
+	my $line = <$fh>;
+	chomp $line;
+	is($line, $broken_content, "handle with broken BOM returns as expected");
     }
 
-    waitpid($pid, 0);
-    unlink $fifo;
-  }
+    SKIP: {
+	skip "mkfifo not supported on this platform", 3
+	    unless $fifo_supported;
+	my($pid, $fifo) = write_fifo($broken_content);
+	open my $fh, '<', $fifo or die "Cannot read fifo '$fifo': $!";
+	my($enc, $spill) = get_encoding_from_filehandle($fh);
+	is($enc, '', "get_encoding_from_filehandle() on unseekable file broken bom");
+	ok($spill, ".. spillage was produced");
+	is($spill . <$fh>, $broken_content, "spillage + content as expected");
+	close $fh;
+
+	waitpid($pid, 0);
+	unlink $fifo;
+    }
 }
 
 # Test internals
