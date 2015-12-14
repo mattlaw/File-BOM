@@ -1,10 +1,15 @@
-# http://module-build.sourceforge.net/META-spec.html
-#XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
-name:         File-BOM
-version:      0.03
-version_from: lib/File/BOM.pm
-installdirs:  site
-requires:
-
-distribution_type: module
-generated_by: ExtUtils::MakeMaker version 6.17
+--- #YAML:1.0
+name: File-BOM
+version: 0.04
+author:
+  - Matt Lawrence E<lt>mattlaw@eudoramail.comE<gt>
+abstract: Utilities for reading Byte Order Marks
+license: perl
+build_requires:
+  Module::Build: 0.20
+  Test::More: 0.01
+provides:
+  File::BOM:
+    file: lib/File/BOM.pm
+    version: 0.04
+generated_by: Module::Build version 0.23

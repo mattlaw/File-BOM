@@ -1,0 +1,15 @@
+MANIFEST
+README
+Makefile.PL
+Build.PL
+lib/File/BOM.pm
+t/01..bom.t
+t/02..perlio-via.t
+t/lib/Test/Framework.pm
+t/data/utf-16be.txt
+t/data/utf-16le.txt
+t/data/utf-8.txt
+t/data/utf-32be.txt
+t/data/utf-32le.txt
+t/data/no_bom.txt
+META.yml                                 Module meta-data (added by MakeMaker)

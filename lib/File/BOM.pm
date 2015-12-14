@@ -8,6 +8,8 @@ File::BOM - Utilities for reading Byte Order Marks
 
   use File::BOM qw( :all )
 
+=head2 high-level functions
+
   # read a file with encoding from the BOM:
   *FH = open_bom($file)
   *FH = open_bom($file, ':utf8') # the same but with a default encoding
@@ -19,12 +21,25 @@ File::BOM - Utilities for reading Byte Order Marks
     decode_from_bom($whole_file, 'UTF-8', 1);
   }
 
+=head2 PerlIO::via interface
+
+  # Read the Right Thing from a unicode file with BOM:
+  open(HANDLE, '<:via(File::BOM)', $filename)
+
+  # Writing little-endian UTF-16 file with BOM:
+  open(HANDLE, '>:encoding(UTF-16LE):via(File::BOM)', $filename)
+
+
+=head2 lower-level functions
+
   # read BOM encoding from filehandle:
   open FH, '<:bytes', $some_file;
   $encoding = get_encoding_from_filehandle(*FH)
 
   # get encoding and BOM length from BOM at start of string:
   ($encoding, $offset) = get_encoding_from_bom($string);
+
+=head2 variables
 
   # print a BOM for a known encoding
   print FH $enc2bom{$encoding};
@@ -57,7 +72,7 @@ my @subs = qw(
 
 my @vars = qw( %bom2enc %enc2bom );
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 our @EXPORT = ();
 our @EXPORT_OK = ( @subs, @vars );
@@ -287,8 +302,6 @@ Read a BOM from an unrewindable source. This means reading the stream one byte
 at a time until either a BOM is found or every possible BOM is ruled out. Any
 non-BOM characters read from the handle will be returned in $spillage.
 
-If a BOM is found, there should be no spillage.
-
 =cut
 
 # currently just a wrapper for _get_encoding_unseekable
@@ -322,11 +335,19 @@ sub _get_encoding_unseekable (*) {
     read($fh, my $byte, 1) or croak $!;
     $so_far .= $byte;
 
-    if (my $enc = $bom2enc{$so_far}) {
+    my @possible = grep { $so_far eq substr($_, 0, $c) } keys %bom2enc;
+    if (@possible == 1 and my $enc = $bom2enc{$so_far}) {
       return ($enc, '');
     }
-    elsif (not grep { $so_far eq substr($_, 0, $c) } keys %bom2enc) {
-      return ('', $so_far);
+    elsif (@possible == 0) {
+      # might need to backtrack one byte
+      my $spill = chop $so_far;
+      if (my $enc = $bom2enc{$so_far}) {
+	return ($enc, $spill);
+      }
+      else {
+	return ('', $so_far . $spill);
+      }
     }
   }
 }
@@ -357,7 +378,7 @@ sub get_encoding_from_bom ($) {
   my $encoding = '';
   my $offset = 0;
 
-  my $bombs = join('|', keys %bom2enc);
+  my $bombs = join('|', sort {length $b <=> length $a} keys %bom2enc);
   if (my($found) = $bom =~ /^($bombs)/) {
     use bytes; # make sure we count bytes in length()
     $encoding = $bom2enc{$found};
@@ -365,6 +386,64 @@ sub get_encoding_from_bom ($) {
   }
 
   return ($encoding, $offset);
+}
+
+=head1 PerlIO::via interface
+
+File::BOM can be used as a PerlIO::via interface.
+
+  # Read from a handle in a 
+  open(HANDLE, '<:via(File::BOM)', 'my_file.txt');
+
+  open(HANDLE, '>:encoding(UTF-16LE):via(File::BOM)', 'out_file.txt)
+  print "foo\n"; # BOM is written to file
+
+This method is less prone to errors on non-seekable files, but doesn't give you
+any information about the encoding being used, or indeed whether or not a BOM
+was present.
+
+=head2 Reading
+
+The via(File::BOM) layer must be added before the handle is read from, otherwise
+any BOM will be missed. If there is no BOM, no decoding will be done.
+
+=head2 Writing
+
+Add the via(File::BOM) layer on top of a unicode encoding layer to print a BOM
+at the start of the output file. This needs to be done before any data is
+written. The BOM is written as part of the first print command on the handle, so
+if you don't print anything to the handle, you won't get a BOM.
+
+=cut
+
+sub PUSHED { bless({}, $_[0]) }
+
+sub FILL {
+  my($self, $fh) = @_;
+
+  my $line = <$fh>;
+  if (not defined $self->{enc}) {
+    ($self->{enc}, my $off) = get_encoding_from_bom($line);
+    $line = substr($line, $off);
+  }
+
+  if ($self->{enc} eq '') {
+    return $line;
+  }
+  else {
+    return decode($self->{enc}, $line);
+  }
+}
+
+sub WRITE {
+  my($self, $buf, $fh) = @_;
+
+  unless ($self->{wrote_bom}) {
+    print $fh "\x{feff}";
+    $self->{wrote_bom} = 1;
+  }
+
+  print $fh $buf;
 }
 
 1;

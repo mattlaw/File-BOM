@@ -3,26 +3,19 @@
 use strict;
 use warnings;
 
+use lib qw( t/lib );
+
 use Test::More;
-use File::Spec;
+use Test::Framework;
+
 use Encode;
 use Fcntl qw( :seek );
 
-my %file2path;
-my %file2enc = (
-      'utf-16le.txt' => 'UTF-16LE',
-      'utf-16be.txt' => 'UTF-16BE',
-      'utf-8.txt'    => 'UTF-8'
-    );
-my @files = keys %file2enc;
-
-$file2path{$_} = File::Spec->catfile(qw(t data), $_) for @files;
-
-plan tests => 1 + ( @files * 9);
+plan tests => 1 + ( @test_files * 8);
 
 use_ok("File::BOM", ':all');
 
-for my $file (@files) {
+for my $file (@test_files) {
   ok(*FH = open_bom($file2path{$file}), "$file: open_bom returned filehandle");
 
   my $line = <FH>;
@@ -34,8 +27,8 @@ for my $file (@files) {
 
   open FH, '<:raw', $file2path{$file};
   my $first_line = <FH>;
-  $first_line =~ s/\r?\n?$//;
-  # chomp $first_line;
+  # $first_line =~ s/\r?\n?$//;
+  chomp $first_line;
 
   seek(FH, 0, SEEK_SET);
 
@@ -44,7 +37,8 @@ for my $file (@files) {
   my($enc, $offset) = get_encoding_from_bom($first_line);
   is($enc, $file2enc{$file}, "$file: get_encoding_from_bom also worked");
 
-  is(decode($enc, substr($first_line, $offset)), 'some text', "$file: .. and offset worked with substr()");
+  $first_line = decode($enc, substr($first_line, $offset)) if $enc;
+  is($first_line, 'some text', "$file: .. and offset worked with substr()");
 
   is(decode_from_bom($first_line), 'some text', "$file: decode_from_bom()");
 
@@ -55,8 +49,20 @@ for my $file (@files) {
   $line = <FH>; chomp $line;
 
   is($enc, $file2enc{$file}, "$file: get_encoding_from_stream()");
-  is($spill, '',	     "$file: no spillage");
-  is(decode($enc, $line), 'some text', "$file: read OK after get_encoding_from_stream");
+
+  # diag("enc: '$enc'\nspill: '$spill'");
+
+  $line = $spill . $line;
+
+  # diag("BEFORE: ". join(' ', map {sprintf("%02X", $_)} unpack("C*", $line)));
+  
+  $line = decode($enc, $line) if $enc;
+
+  # diag("AFTER:  ". join(' ', map {sprintf("%02X", $_)} unpack("C*", $line)));
+  
+  # diag("after decode:  '$line'");
+
+  is($line, 'some text', "$file: read OK after get_encoding_from_stream");
 
   close FH;
 }
