@@ -10,7 +10,16 @@ use Test::Framework;
 
 use File::BOM qw( %enc2bom );
 
-plan tests => 2 * @test_files + 4 * keys %enc2bom;
+# Expected data for "moose" tests (below)
+our %should_be = (
+ 'UTF-8'    => "\x{ef}\x{bb}\x{bf}m\x{c3}\x{b8}\x{c3}\x{b8}se\x{e2}\x{80}\x{a6}",
+ 'UTF-16BE' => "\x{fe}\x{ff}\x{0}m\x{0}\x{f8}\x{0}\x{f8}\x{0}s\x{0}e &",
+ 'UTF-16LE' => "\x{ff}\x{fe}m\x{0}\x{f8}\x{0}\x{f8}\x{0}s\x{0}e\x{0}& ",
+ 'UTF-32BE' => "\x{0}\x{0}\x{fe}\x{ff}\x{0}\x{0}\x{0}m\x{0}\x{0}\x{0}\x{f8}\x{0}\x{0}\x{0}\x{f8}\x{0}\x{0}\x{0}s\x{0}\x{0}\x{0}e\x{0}\x{0} &",
+ 'UTF-32LE' => "\x{ff}\x{fe}\x{0}\x{0}m\x{0}\x{0}\x{0}\x{f8}\x{0}\x{0}\x{0}\x{f8}\x{0}\x{0}\x{0}s\x{0}\x{0}\x{0}e\x{0}\x{0}\x{0}& \x{0}\x{0}",
+);
+
+plan tests => 2 * @test_files + 5 * keys(%enc2bom) + keys(%should_be);
 
 for my $test_file (@test_files) {
   ok(
@@ -26,11 +35,18 @@ for my $test_file (@test_files) {
 for my $enc (sort keys %enc2bom) {
   my $file = "test_file-$enc.txt";
   ok(
-    open(BOM_OUT, ">:encoding($enc):via(File::BOM)", $file),
+    open(BOM_OUT, ">:encoding($enc):via(File::BOM):utf8", $file),
     "Opened file for writing $enc via layer"
-  ) or diag "opening test_file.txt in $enc: $!";
-  ok(print(BOM_OUT "some text\n"), 'printed through layer');
-  print BOM_OUT "more text\n";
+  ) or diag "$file: $!";
+
+  my $test = print(BOM_OUT "some text\n");
+  ok($test, 'print() through layer')
+    or diag("print() returned ". (defined($test)?$test:'undef'));
+
+  $test = print(BOM_OUT "more text\n");
+  ok($test, 'print() through layer again')
+    or diag("print() returned ". (defined($test)?$test:'undef'));
+
   close BOM_OUT;
 
   # now re-read
@@ -42,9 +58,47 @@ for my $enc (sort keys %enc2bom) {
 
   $line = <BOM_IN>; chomp $line;
   is($line, 'more text', 'BOM not written in second print call');
+
   close BOM_IN;
 
   unlink $file or diag "Couldn't remove $file: $!";
+}
+
+# Mark Fowler's "moose" test:
+{
+  # This is 'moose...' (with slashes in the 'o's them, and the '...'
+  # as one char).  As the '...' can't be represented in latin-1 then
+  # perl will store the thing internally as a utf8 string with the
+  # utf8 flag enabled.
+  my $moose = "m\x{f8}\x{f8}se\x{2026}";
+
+  for my $enc (keys %should_be) {
+    my $file = "moose-$enc.txt";
+    open(FH, ">:encoding($enc):via(File::BOM):utf8", $file) or die "Can't write to $file: $!\n";
+    print FH $moose;
+    close FH;
+
+    open(FH, '<', $file) or die "Can't read $file: $!\n";
+    local $/ = undef;
+    my $value = <FH>;
+    close FH;
+
+    is(
+      reasciify($value),
+      reasciify($should_be{$enc}),
+      "check file for $enc"
+    );
+  }
+}
+
+sub reasciify {
+  my $string = shift;
+  $string = join "", map {
+   my $ord = ord($_);
+    ($ord > 127 || ($ord < 32 && $ord != 10))
+     ? sprintf '\x{%x}', $ord
+     : $_
+  } split //, $string
 }
 
 __END__

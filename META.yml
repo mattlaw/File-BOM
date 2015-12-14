@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name: File-BOM
-version: 0.05
+version: 0.06
 author:
   - Matt Lawrence E<lt>mattlaw@cpan.orgE<gt>
 abstract: Utilities for reading Byte Order Marks
@@ -13,5 +13,5 @@ build_requires:
 provides:
   File::BOM:
     file: lib/File/BOM.pm
-    version: 0.05
+    version: 0.06
 generated_by: Module::Build version 0.23

@@ -78,7 +78,7 @@ my @subs = qw(
 
 my @vars = qw( %bom2enc %enc2bom );
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 our @EXPORT = ();
 our @EXPORT_OK = ( @subs, @vars );
@@ -211,7 +211,7 @@ lost!)
   # keep spillage if my_socket is unseekable
   (*FH, $encoding, $spillage) = open_bom('my_socket', undef, 1);
 
-  # discard spillage is my_socket is unseekable - not recommended
+  # discard spillage if my_socket is unseekable - not recommended
   *FH = open_bom('my_socket', undef, 1);
 
 =cut
@@ -246,7 +246,7 @@ sub open_bom ($;$) {
   return wantarray ? ($fh, $enc, $spill) : $fh;
 }
 
-=head2 decode_from_bom()
+=head2 decode_from_bom
 
   $unicode_string = decode_from_bom($string, $default, $check)
 
@@ -285,7 +285,7 @@ sub decode_from_bom {
 
   $encoding = get_encoding_from_filehandle(HANDLE)
 
-  ($encoding, $spillage) = get_encosing_from_filehandle(HANDLE)
+  ($encoding, $spillage) = get_encoding_from_filehandle(HANDLE)
 
 Returns the encoding found in the given filehandle.
 
@@ -417,11 +417,10 @@ sub get_encoding_from_bom ($) {
 
 File::BOM can be used as a PerlIO::via interface.
 
-  # Read from a handle in a 
   open(HANDLE, '<:via(File::BOM)', 'my_file.txt');
 
-  open(HANDLE, '>:encoding(UTF-16LE):via(File::BOM)', 'out_file.txt)
-  print "foo\n"; # BOM is written to file
+  open(HANDLE, '>:encoding(UTF-16LE):via(File::BOM):utf8', 'out_file.txt)
+  print "foo\n"; # BOM is written to file here
 
 This method is less prone to errors on non-seekable files, but doesn't give you
 any information about the encoding being used, or indeed whether or not a BOM
@@ -439,9 +438,27 @@ at the start of the output file. This needs to be done before any data is
 written. The BOM is written as part of the first print command on the handle, so
 if you don't print anything to the handle, you won't get a BOM.
 
+At the time of writing there is a "Wide character in print" warning generated
+when the via(File::BOM) layer doesn't receive utf8 on writing.
+
+  # This works OK
+  open(FH, '>:encoding(UTF-16LE):via(File::BOM):utf8', $filename)
+
+  # This generates warnings
+  open(FH, '>:encoding(UTF-16LE):via(File::BOM)', $filename)
+
+This glitch may be resolved in future versions of File::BOM, or future versions
+of PerlIO::via.
+
 =cut
 
-sub PUSHED { bless({}, $_[0]) }
+sub PUSHED { bless({}, $_[0]) || -1 }
+
+sub UTF8 {
+  # This doesn't seem to work as advertised, at present.
+
+  return 0;
+}
 
 sub FILL {
   my($self, $fh) = @_;
@@ -469,8 +486,14 @@ sub WRITE {
     $self->{wrote_bom} = 1;
   }
 
+  $buf = decode_utf8($buf, 1) unless Encode::is_utf8($buf, 1);
+
   print $fh $buf;
+
+  return 1;
 }
+
+sub FLUSH { 0 }
 
 1;
 
@@ -495,7 +518,7 @@ this is subject to change in future versions.
 
 =head1 BUGS
 
-None known.
+The PerlIO::via interface has a few problems with writing, see above.
 
 =head1 AUTHOR
 
