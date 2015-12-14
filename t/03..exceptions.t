@@ -48,8 +48,8 @@ throws_ok { decode_from_bom(undef) }
 	    "_get_encoding_seekable on unreadable handle fails";
 
     throws_ok { File::BOM::_get_encoding_unseekable(\*WRITER) }
-		qr/^Couldn't read byte/,
-		"_get_encoding_unseekable() on unreadable handle fails";
+            qr/^Couldn't read byte/,
+            "_get_encoding_unseekable() on unreadable handle fails";
 
     close WRITER;
     unlink $tmpfile;
@@ -58,6 +58,9 @@ throws_ok { decode_from_bom(undef) }
     {
 	skip "mkfifo not supported on this platform", 3
 	    unless $fifo_supported;
+
+        skip "mkfifo tests skipped on cygwin, set TEST_FIFO to enable them", 3
+            if $^O eq 'cygwin' && !$ENV{'TEST_FIFO'};
 
 	my($pid, $fifo);
 

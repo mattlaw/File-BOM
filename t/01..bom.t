@@ -8,7 +8,7 @@ use lib qw( t/lib );
 use Test::More;
 use Test::Framework;
 
-use Encode;
+use Encode qw( encode decode :fallback_all );
 use Fcntl qw( :seek );
 
 our @encodings;
@@ -30,6 +30,7 @@ local $SIG{__WARN__} = sub {
 };
 
 for my $file (@test_files) {
+    my $file_enc = $file2enc{$file};
     is(open_bom(FH, $file2path{$file}), $file2enc{$file}, "$file: open_bom returned encoding");
     my $expect = $filecontent{$file};
 
@@ -45,8 +46,8 @@ for my $file (@test_files) {
 	open BOMB, '<', $file2path{$file}
 	    or die "Couldn't read '$file2path{$file}': $!";
 
-	my $enc = defuse(BOMB);
-	is($enc, $file2enc{$file}, "$file: defuse returns correct encoding ($enc)");
+	my $enc = defuse BOMB;
+	is($enc, $file_enc, "$file: defuse returns correct encoding ($enc)");
 	$line = <BOMB>;
 	chomp $line;
 	is($line, $expect, "$file: defused version content OK");
@@ -60,13 +61,13 @@ for my $file (@test_files) {
 
     seek(FH, 0, SEEK_SET);
 
-    is(get_encoding_from_filehandle(FH), $file2enc{$file}, "$file: get_encoding_from_filehandle returned correct encoding");
+    is(get_encoding_from_filehandle(FH), $file_enc, "$file: get_encoding_from_filehandle returned correct encoding");
 
     my($enc, $offset) = get_encoding_from_bom($first_line);
-    is($enc, $file2enc{$file}, "$file: get_encoding_from_bom also worked");
+    is($enc, $file_enc, "$file: get_encoding_from_bom also worked");
 
     {
-	my $decoded = $enc ? decode($enc, substr($first_line, $offset)) 
+	my $decoded = $enc ? decode($enc, substr($first_line, $offset))
 			   : $first_line;
 
 	is($decoded, $expect, "$file: .. and offset worked with substr()");
@@ -75,21 +76,22 @@ for my $file (@test_files) {
     #
     # decode_from_bom()
     #
-    is(decode_from_bom($first_line, 'UTF-8', Encode::FB_CROAK), $expect, "$file: decode_from_bom() scalar context");
+    my $result = decode_from_bom($first_line, 'UTF-8', FB_CROAK);
+    is($result, $expect, "$file: decode_from_bom() scalar context");
     {
 	# with default
 	my $default = 'UTF-8';
-	my $expect_enc = $file2enc{$file} || $default;
+	my $expect_enc = $file_enc || $default;
 
-	my($decoded, $got_enc) = decode_from_bom($first_line, $default, Encode::FB_CROAK);
+	my($decoded, $got_enc) = decode_from_bom($first_line, $default, FB_CROAK);
 
 	is($decoded, $expect,      "$file: decode_from_bom() list context");
 	is($got_enc, $expect_enc,  "$file: decode_from_bom() list context encoding");
     }
     {
 	# without default
-	my $expect_enc = $file2enc{$file};
-	my($decoded, $got_enc) = decode_from_bom($first_line, undef, Encode::FB_CROAK);
+	my $expect_enc = $file_enc;
+	my($decoded, $got_enc) = decode_from_bom($first_line, undef, FB_CROAK);
 
 	is($decoded, $expect,      "$file: decode_from_bom() list context, no default");
 	is($got_enc, $expect_enc,  "$file: decode_from_bom() list context encoding, no default");
@@ -101,7 +103,7 @@ for my $file (@test_files) {
 
     $line = <FH>; chomp $line;
 
-    is($enc, $file2enc{$file}, "$file: get_encoding_from_stream()");
+    is($enc, $file_enc, "$file: get_encoding_from_stream()");
 
     $line = $spill . $line;
     $line = decode($enc, $line) if $enc;
@@ -113,14 +115,21 @@ for my $file (@test_files) {
 
 # Test unseekable
 SKIP: {
-    skip "mkfifo not supported on this platform", (4 * @encodings)
+    my $tests = 4 * @encodings;
+    skip "mkfifo not supported on this platform", $tests
 	unless $fifo_supported;
 
-    for my $encoding (@encodings) {
-	my $expected = my $test = "Testing \x{2170}, \x{2171}, \x{2172}\n";
-	my $bytes = $enc2bom{$encoding}.encode($encoding, $test, Encode::FB_CROAK);
+    skip "mkfifo tests skipped on cygwin, set TEST_FIFO to enable them", $tests
+        if $^O eq 'cygwin' && !$ENV{'TEST_FIFO'};
 
+    for my $encoding (@encodings) {
 	my($pid, $fifo, $enc, $spill, $result);
+
+        # We need two copies of this as the encode below is destructive!
+        my $expected = my $test = "Testing \x{2170}, \x{2171}, \x{2172}\n";
+
+	my $bytes = $enc2bom{$encoding}
+                  . encode($encoding, $test, FB_CROAK);
 
 	($pid, $fifo) = write_fifo($bytes);
 	($enc, $spill) = open_bom(my $fh, $fifo);
@@ -145,12 +154,12 @@ SKIP: {
 
 	is($enc, $encoding, "defused fifo OK ($encoding)");
 	is($result, $expected, "read defused fifo OK ($encoding)")
-	or diag(
-	    "Hex dump:\n".
-	    "Got:      ". hexdump($result) ."\n".
-	    "Expected: ". hexdump($expected) ."\n".
-	    "Spillage: ". hexdump($spill)
-	);
+        or diag(
+            "Hex dump:\n".
+            "Got:      ". hexdump($result) ."\n".
+            "Expected: ". hexdump($expected) ."\n".
+            "Spillage: ". hexdump($spill)
+        );
     }
 }
 
@@ -169,14 +178,18 @@ SKIP: {
     SKIP: {
 	skip "mkfifo not supported on this platform", 3
 	    unless $fifo_supported;
+
+        skip "mkfifo tests skipped on cygwin, set TEST_FIFO to enable them", 3
+            if $^O eq 'cygwin' && !$ENV{'TEST_FIFO'};
+
 	my($pid, $fifo) = write_fifo($broken_content);
 	open my $fh, '<', $fifo or die "Cannot read fifo '$fifo': $!";
 	my($enc, $spill) = get_encoding_from_filehandle($fh);
 	is($enc, '', "get_encoding_from_filehandle() on unseekable file broken bom");
 	ok($spill, ".. spillage was produced");
 	is($spill . <$fh>, $broken_content, "spillage + content as expected");
-	close $fh;
 
+	close $fh;
 	waitpid($pid, 0);
 	unlink $fifo;
     }

@@ -1,6 +1,11 @@
 File::BOM changes document
 
-0.11 (Current version)
+0.12 - Tue Jul 11 2006
+    - Added a description section to docs
+    - Added information about test failures on cygwin
+    - Added overridable test skipping for tests that cause hangs on cygwin
+
+0.11
     - Added Test::Pod and Test::Pod::Coverage tests at the behest of CPANTS
 
 0.10

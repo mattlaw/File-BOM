@@ -5,6 +5,7 @@ Makefile.PL
 MANIFEST
 META.yml			Module meta-data (added by MakeMaker)
 README
+README-cygwin
 t/00..setup.t
 t/01..bom.t
 t/02..perlio-via.t

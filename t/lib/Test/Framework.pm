@@ -94,10 +94,16 @@ sub write_fifo ($) {
 
     mkfifo($fifo, 0700) or die "Couldn't create fifo at '$fifo': $!";
 
-    if (my $pid = fork()) {
+    my $pid = fork();
+    if ($pid) {
+        # I'm the parent
 	return ($pid, $fifo);
     }
+    elsif (!defined $pid) {
+        die "$0: fork: $!";
+    }
     else {
+        # I'm the child
 	if (open my $writer, '>', $fifo) {
 	    print $writer $bytes;
 	    close $writer;
