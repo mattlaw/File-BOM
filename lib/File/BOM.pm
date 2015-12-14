@@ -78,7 +78,7 @@ my @subs = qw(
 
 my @vars = qw( %bom2enc %enc2bom );
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 
 our @EXPORT = ();
 our @EXPORT_OK = ( @subs, @vars );
@@ -203,6 +203,8 @@ sockets) will cause croaking, unless $try_unseekable is set in which case any
 spillage is returned after the encoding (in scalar context the spillage is
 lost!)
 
+Any spillage will automatically decoded from the found encoding, if found.
+
   e.g.
 
   # croak if my_socket is unseekable
@@ -235,11 +237,12 @@ sub open_bom ($;$$) {
 
   if ($enc) {
     $mode = ":encoding($enc)";
+    $spill = decode($enc, $spill, Encode::FB_CROAK) if $spill;
   }
 
   if ($mode) {
     binmode($fh, $mode) or croak(
-      "Can't set binmode of handle opened on '$filename' to '$mode': $!"
+      "Couldn't set binmode of handle opened on '$filename' to '$mode': $!"
     );
   }
 
@@ -275,7 +278,7 @@ sub decode_from_bom ($;$$) {
   $enc ||= $default;
 
   my $out;
-  if (defined $enc) { $out = decode($enc, substr($string, $off), $check); }
+  if (defined $enc) { $out = decode($enc, substr($string, $off), $check) }
   else		    { $out = $string; $enc = '' }
 
   return wantarray ? ($out, $enc) : $out;
@@ -312,7 +315,7 @@ sub get_encoding_from_filehandle (*) {
     return _get_encoding_unseekable($fh);
   }
   else {
-    croak $!;
+    croak "Unseekable handle: $!";
   }
 }
 
@@ -323,6 +326,10 @@ sub get_encoding_from_filehandle (*) {
 Read a BOM from an unrewindable source. This means reading the stream one byte
 at a time until either a BOM is found or every possible BOM is ruled out. Any
 non-BOM characters read from the handle will be returned in $spillage.
+
+If a BOM is found and the spillage contains a partial character (judging by the
+expected character width for the encoding) more bytes will be read from the
+handle to ensure that a complete character is returned in spillage.
 
 This function is less efficient than get_encoding_from_filehandle, but should
 work just as well on a seekable handle as on an unseekable one.
@@ -340,11 +347,12 @@ sub get_encoding_from_stream (*) { _get_encoding_unseekable($_[0]) }
 sub _get_encoding_seekable (*) {
   my $fh = shift;
 
-  read($fh, my $bom, $MAX_BOM_LENGTH) or croak $!;
+  defined(read($fh, my $bom, $MAX_BOM_LENGTH))
+      or croak "Couldn't read from handle: $!";
 
   my($enc, $off) = get_encoding_from_bom($bom);
 
-  seek($fh, $off, SEEK_SET) or croak $!;
+  seek($fh, $off, SEEK_SET) or croak "Couldn't reset read position: $!";
 
   return $enc;
 }
@@ -357,7 +365,8 @@ sub _get_encoding_unseekable (*) {
 
   my $so_far = '';
   for my $c (1 .. $MAX_BOM_LENGTH) {
-    read($fh, my $byte, 1) or croak $!;
+    defined(read($fh, my $byte, 1)) or croak "Couldn't read byte: $!";
+
     $so_far .= $byte;
 
     my @possible = grep { $so_far eq substr($_, 0, $c) } keys %bom2enc;
@@ -368,6 +377,11 @@ sub _get_encoding_unseekable (*) {
       # might need to backtrack one byte
       my $spill = chop $so_far;
       if (my $enc = $bom2enc{$so_far}) {
+	my $char_length = _get_char_length($enc, $spill);
+
+	read($fh, my $extra, $char_length - length $spill);
+	$spill .= $extra;
+
 	return ($enc, $spill);
       }
       else {
@@ -375,6 +389,15 @@ sub _get_encoding_unseekable (*) {
       }
     }
   }
+}
+
+# internal:
+# make regex for recognising BOMs
+sub _bom_regex () {
+  my @bombs = sort { length $b <=> length $a } keys %bom2enc;
+  local $" = '|';
+
+  return qr/^(@bombs)/;
 }
 
 =head2 get_encoding_from_bom
@@ -397,26 +420,42 @@ To get the data from the string, the following should work:
 
 =cut
 
-sub bom_regex () {
-  my @bombs = sort { length $b <=> length $a } keys %bom2enc;
-  local $" = '|';
-
-  return qr/^(@bombs)/;
-}
-
 sub get_encoding_from_bom ($) {
-  my $bom = shift || $_;
+  my $bom = shift;
 
   my $encoding = '';
   my $offset = 0;
 
-  if (my($found) = $bom =~ bom_regex) {
+  if (my($found) = $bom =~ _bom_regex) {
     use bytes; # make sure we count bytes in length()
     $encoding = $bom2enc{$found};
     $offset = length($found);
   }
 
   return ($encoding, $offset);
+}
+
+# Internal:
+# Work out character length for given encoding and spillage byte
+sub _get_char_length ($$) {
+  my($enc, $byte) = @_;
+
+  if ($enc eq 'UTF-8') {
+    if (($byte & 0x80) == 0) {
+      return 1;
+    }
+    else {
+      my $length;
+      for ($length = 0; (($byte << $length) & 0xc0) == 0xc0; $length++) {}
+      return $length + 1;
+    }
+  }
+  elsif ($enc =~ /^UTF-(16|32)/) {
+    return $1 / 8;
+  }
+  else {
+    return;
+  }
 }
 
 =head1 PerlIO::via interface
@@ -548,14 +587,54 @@ __END__
 
 =back
 
-=head1 ERROR HANDLING
+=head1 DIAGNOSTICS
 
-The default behaviour on encountering an IO error of any sort is to croak $! but
-this is subject to change in future versions.
+The following exceptions are raised via croak():
+
+=over 4
+
+=item * Couldn't read '<filename>': $!
+
+open_bom() couldn't open the given file for reading
+
+=item * Could't set binmode of handle opened on '<filname>' to '<mode>': $!
+
+open_bom() couldn't set the binmode of the handle
+
+=item * No string
+
+decode_from_bom called on an undefined value
+
+=item * Unseekable handle: $!
+
+get_encoding_from_filehandle() called on an unseekable handle in scalar context
+or open_bom() called on an unseekable file without the $try_unseekable argument
+set to true
+
+=item * Couldn't read from handle: $!
+
+_get_encoding_seekable() couldn't read the handle. This function is called from
+get_encoding_from_filehandle() and open_bom()
+
+=item * Couldn't reset read position: $!
+
+_get_encoding_seekable couldn't seek to the position after the BOM.
+
+=item * Couldn't read byte: $!
+
+get_encoding_from_stream couldn't read from the handle. This function is called
+from get_encoding_from_filehandle() and open_bom() when the handle or file is
+unseekable.
+
+=back
 
 =head1 BUGS
 
 The PerlIO::via interface has a few problems with writing, see above.
+
+Under windows, warnings may be generated when using the PerlIO::via interface to
+read UTF-16LE and UTF-32LE encoded files. This seems to be a bug in the relevant
+encoding(...) layers provided by L<Encode>.
 
 =head1 AUTHOR
 

@@ -7,6 +7,8 @@ META.yml			Module meta-data (added by MakeMaker)
 README
 t/01..bom.t
 t/02..perlio-via.t
+t/03..exceptions.t
+t/data/broken_bom.txt
 t/data/no_bom.txt
 t/data/utf-16be.txt
 t/data/utf-16le.txt
@@ -15,3 +17,4 @@ t/data/utf-32le.txt
 t/data/utf-8.txt
 t/data/utf8_data.csv
 t/lib/Test/Framework.pm
+TODO

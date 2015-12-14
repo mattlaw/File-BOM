@@ -1,5 +1,12 @@
+File::BOM changes document
 
-0.07
+0.08 (Next version)
+    - Added TODO document
+    - Added tests (now at 100% coverage for non PerlIO::via code)
+    - Added diagnostics documentation
+    - Fixed bugs in unseekable spillage handling
+
+0.07 (Current version)
     - Added Changes document
     - Added support for seek() in PerlIO::via interface
 

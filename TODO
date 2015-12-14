@@ -1,0 +1,21 @@
+TODO list for File::BOM
+
+Iron out bugs in the PerlIO::via interface.
+
+  o Investigate bugs in PerlIO::via - patch?
+  o Re-implement using XS?
+
+Test coverage
+  o Currently can't get Devel::Cover working on Perlio::via tests.
+
+    Bizarre copy of HASH in aassign at /usr/local/lib/perl5/5.8.5/i686-linux/B.pm line 225.
+
+    with newest Devel::Cover:
+
+    Bizarre copy of ARRAY in aassign at /usr/local/lib/perl5/5.8.5/i686-linux/B.pm line 225.
+
+Finalise API.
+
+  o Make OO version?
+    o Would need a different namespace
+

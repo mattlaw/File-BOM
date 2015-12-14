@@ -19,7 +19,7 @@ our %should_be = (
  'UTF-32LE' => "\x{ff}\x{fe}\x{0}\x{0}m\x{0}\x{0}\x{0}\x{f8}\x{0}\x{0}\x{0}\x{f8}\x{0}\x{0}\x{0}s\x{0}\x{0}\x{0}e\x{0}\x{0}\x{0}& \x{0}\x{0}",
 );
 
-plan tests => 2 * @test_files + 5 * keys(%enc2bom) + keys(%should_be) + 1;
+plan tests => 2 * @test_files + 6 * keys(%enc2bom) + keys(%should_be) + 1;
 
 for my $test_file (@test_files) {
   ok(
@@ -48,6 +48,27 @@ for my $enc (sort keys %enc2bom) {
     or diag("print() returned ". (defined($test)?$test:'undef'));
 
   close BOM_OUT;
+
+  # check BOM
+  {
+    if (open my $fh, '<:bytes', $file) {
+      read $fh, my $sample, $File::BOM::MAX_BOM_LENGTH;
+      like($sample, qr/^\Q$enc2bom{$enc}/, "BOM written correctly");
+      close $fh;
+    }
+    else {
+      diag "Couldn't open $file: $!";
+      fail(1);
+    }
+  }
+
+  # Ignore known harmless warning
+  local $SIG{__WARN__} = sub {
+    my $warning = "@_";
+    if ($warning !~ /^UTF-(?:16|32)LE:Partial character/) {
+      warn $warning;
+    }
+  };
 
   # now re-read
   my $line;

@@ -110,6 +110,9 @@ FUNCTIONS
     which case any spillage is returned after the encoding (in scalar
     context the spillage is lost!)
 
+    Any spillage will automatically decoded from the found encoding, if
+    found.
+
       e.g.
 
       # croak if my_socket is unseekable
@@ -163,6 +166,11 @@ FUNCTIONS
     one byte at a time until either a BOM is found or every possible BOM is
     ruled out. Any non-BOM characters read from the handle will be returned
     in $spillage.
+
+    If a BOM is found and the spillage contains a partial character (judging
+    by the expected character width for the encoding) more bytes will be
+    read from the handle to ensure that a complete character is returned in
+    spillage.
 
     This function is less efficient than get_encoding_from_filehandle, but
     should work just as well on a seekable handle as on an unseekable one.
@@ -234,12 +242,41 @@ SEE ALSO
     * Encode::Unicode
     * <http://www.unicode.org/unicode/faq/utf_bom.html#BOM>
 
-ERROR HANDLING
-    The default behaviour on encountering an IO error of any sort is to
-    croak $! but this is subject to change in future versions.
+DIAGNOSTICS
+    The following exceptions are raised via croak():
+
+    * Couldn't read '<filename>': $!
+        open_bom() couldn't open the given file for reading
+
+    * Could't set binmode of handle opened on '<filname>' to '<mode>': $!
+        open_bom() couldn't set the binmode of the handle
+
+    * No string
+        decode_from_bom called on an undefined value
+
+    * Unseekable handle: $!
+        get_encoding_from_filehandle() called on an unseekable handle in
+        scalar context or open_bom() called on an unseekable file without
+        the $try_unseekable argument set to true
+
+    * Couldn't read from handle: $!
+        _get_encoding_seekable() couldn't read the handle. This function is
+        called from get_encoding_from_filehandle() and open_bom()
+
+    * Couldn't reset read position: $!
+        _get_encoding_seekable couldn't seek to the position after the BOM.
+
+    * Couldn't read byte: $!
+        get_encoding_from_stream couldn't read from the handle. This
+        function is called from get_encoding_from_filehandle() and
+        open_bom() when the handle or file is unseekable.
 
 BUGS
     The PerlIO::via interface has a few problems with writing, see above.
+
+    Under windows, warnings may be generated when using the PerlIO::via
+    interface to read UTF-16LE and UTF-32LE encoded files. This seems to be
+    a bug in the relevant encoding(...) layers provided by Encode.
 
 AUTHOR
     Matt Lawrence <mattlaw@cpan.org>

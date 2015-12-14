@@ -31,6 +31,7 @@ my $build = Module::Build->new
 			 },
    build_requires     => {
 			   'Test::More'    => '0.01',
+			   'Test::Exception' => '0.20',
 			   'Module::Build' => '0.20',
 		         },
   );
