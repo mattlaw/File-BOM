@@ -1,12 +1,17 @@
 File::BOM changes document
 
-0.08 (Next version)
+0.09 (Current version)
+    - Added tell() support to work with seek() properly
+    - Hopefully fixed compatibility with older versions of Encode
+    - PerlIO::via should now work with the latest perl
+
+0.08
     - Added TODO document
     - Added tests (now at 100% coverage for non PerlIO::via code)
     - Added diagnostics documentation
     - Fixed bugs in unseekable spillage handling
 
-0.07 (Current version)
+0.07
     - Added Changes document
     - Added support for seek() in PerlIO::via interface
 

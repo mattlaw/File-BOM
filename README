@@ -20,7 +20,7 @@ SYNOPSIS
         local $/ = undef;
         my $whole_file = <STDIN>;
         decode_from_bom($whole_file, 'UTF-8', 1);
-      }
+      };
 
   PerlIO::via interface
       # Read the Right Thing from a unicode file with BOM:
@@ -47,6 +47,7 @@ SYNOPSIS
 EXPORTS
     Nothing by default.
 
+  symbols
     * open_bom()
     * decode_from_bom()
     * get_encoding_from_filehandle()
@@ -54,6 +55,8 @@ EXPORTS
     * get_encoding_from_bom()
     * %bom2enc
     * %enc2bom
+
+  tags
     * :all
         All of the above
 
@@ -197,7 +200,7 @@ PerlIO::via interface
 
       open(HANDLE, '<:via(File::BOM)', 'my_file.txt');
 
-      open(HANDLE, '>:encoding(UTF-16LE):via(File::BOM):utf8', 'out_file.txt)
+      open(HANDLE, '>:encoding(UTF-16LE):via(File::BOM)', 'out_file.txt)
       print "foo\n"; # BOM is written to file here
 
     This method is less prone to errors on non-seekable files, but doesn't
@@ -216,17 +219,17 @@ PerlIO::via interface
     on the handle, so if you don't print anything to the handle, you won't
     get a BOM.
 
-    At the time of writing there is a "Wide character in print" warning
-    generated when the via(File::BOM) layer doesn't receive utf8 on writing.
+    There is a "Wide character in print" warning generated when the
+    via(File::BOM) layer doesn't receive utf8 on writing. This glitch was
+    resolved in perl version 5.8.7, but if your perl version is older than
+    that, you'll need to make sure that the via(File::BOM) layer receives
+    utf8 like this:
 
       # This works OK
       open(FH, '>:encoding(UTF-16LE):via(File::BOM):utf8', $filename)
 
-      # This generates warnings
+      # This generates warnings with older perls
       open(FH, '>:encoding(UTF-16LE):via(File::BOM)', $filename)
-
-    This glitch may be resolved in future versions of File::BOM, or future
-    versions of PerlIO::via.
 
   Seeking
     Seeking with SEEK_SET results in an offset equal to the length of any
@@ -235,7 +238,9 @@ PerlIO::via interface
       # Seek to end of BOM (not start of file!)
       seek(FILE_BOM_HANDLE, 0, SEEK_SET)
 
-    Versions previous to 0.07 do not support seeking at all.
+  Telling
+    In order to work correctly with seek(), tell() also returns a postion
+    adjusted by the length of the BOM.
 
 SEE ALSO
     * Encode
@@ -243,12 +248,12 @@ SEE ALSO
     * <http://www.unicode.org/unicode/faq/utf_bom.html#BOM>
 
 DIAGNOSTICS
-    The following exceptions are raised via croak():
+    The following exceptions are raised via croak()
 
     * Couldn't read '<filename>': $!
         open_bom() couldn't open the given file for reading
 
-    * Could't set binmode of handle opened on '<filname>' to '<mode>': $!
+    * Couldn't set binmode of handle opened on '<filname>' to '<mode>': $!
         open_bom() couldn't set the binmode of the handle
 
     * No string
@@ -272,7 +277,8 @@ DIAGNOSTICS
         open_bom() when the handle or file is unseekable.
 
 BUGS
-    The PerlIO::via interface has a few problems with writing, see above.
+    Older versions of PerlIO::via have a few problems with writing, see
+    above.
 
     Under windows, warnings may be generated when using the PerlIO::via
     interface to read UTF-16LE and UTF-32LE encoded files. This seems to be
@@ -280,4 +286,6 @@ BUGS
 
 AUTHOR
     Matt Lawrence <mattlaw@cpan.org>
+
+    With thanks to Mark Fowler and Steve Purkis for additional tests.
 

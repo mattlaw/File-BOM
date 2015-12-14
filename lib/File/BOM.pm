@@ -25,7 +25,7 @@ File::BOM - Utilities for reading Byte Order Marks
     local $/ = undef;
     my $whole_file = <STDIN>;
     decode_from_bom($whole_file, 'UTF-8', 1);
-  }
+  };
 
 =head2 PerlIO::via interface
 
@@ -62,11 +62,9 @@ use warnings;
 
 use base qw( Exporter );
 
-use Symbol qw( gensym );
-use Fcntl  qw( :seek );
 use Carp   qw( croak );
-
-use Encode;
+use Fcntl  qw( :seek );
+use Encode qw( :DEFAULT :fallbacks is_utf8 );
 
 my @subs = qw(
       open_bom
@@ -78,7 +76,7 @@ my @subs = qw(
 
 my @vars = qw( %bom2enc %enc2bom );
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 
 our @EXPORT = ();
 our @EXPORT_OK = ( @subs, @vars );
@@ -91,6 +89,8 @@ our %EXPORT_TAGS = (
 =head1 EXPORTS
 
 Nothing by default.
+
+=head2 symbols
 
 =over 4
 
@@ -107,6 +107,12 @@ Nothing by default.
 =item * %bom2enc
 
 =item * %enc2bom
+
+=back
+
+=head2 tags
+
+=over 4
 
 =item * :all
 
@@ -168,8 +174,7 @@ $MAX_BOM_LENGTH = 4;
 for my $enc (keys %enc2bom) {
   use bytes;
 
-  my $bom = $enc2bom{$enc};
-  my $len = length $bom || 0;
+  my $len = length $enc2bom{$enc} || 0;
 
   $MAX_BOM_LENGTH = $len if $len > $MAX_BOM_LENGTH;
 }
@@ -221,9 +226,8 @@ Any spillage will automatically decoded from the found encoding, if found.
 sub open_bom ($;$$) {
   my($filename, $mode, $try) = @_;
 
-  my $fh = gensym();
+  my($fh, $enc);
   my $spill = '';
-  my $enc;
 
   open($fh, '<:bytes', $filename)
       or croak "Couldn't read '$filename': $!";
@@ -237,7 +241,7 @@ sub open_bom ($;$$) {
 
   if ($enc) {
     $mode = ":encoding($enc)";
-    $spill = decode($enc, $spill, Encode::FB_CROAK) if $spill;
+    $spill = decode($enc, $spill, FB_CROAK) if $spill;
   }
 
   if ($mode) {
@@ -464,7 +468,7 @@ File::BOM can be used as a PerlIO::via interface.
 
   open(HANDLE, '<:via(File::BOM)', 'my_file.txt');
 
-  open(HANDLE, '>:encoding(UTF-16LE):via(File::BOM):utf8', 'out_file.txt)
+  open(HANDLE, '>:encoding(UTF-16LE):via(File::BOM)', 'out_file.txt)
   print "foo\n"; # BOM is written to file here
 
 This method is less prone to errors on non-seekable files, but doesn't give you
@@ -483,17 +487,16 @@ at the start of the output file. This needs to be done before any data is
 written. The BOM is written as part of the first print command on the handle, so
 if you don't print anything to the handle, you won't get a BOM.
 
-At the time of writing there is a "Wide character in print" warning generated
-when the via(File::BOM) layer doesn't receive utf8 on writing.
+There is a "Wide character in print" warning generated when the via(File::BOM)
+layer doesn't receive utf8 on writing. This glitch was resolved in perl version
+5.8.7, but if your perl version is older than that, you'll need to make sure
+that the via(File::BOM) layer receives utf8 like this:
 
   # This works OK
   open(FH, '>:encoding(UTF-16LE):via(File::BOM):utf8', $filename)
 
-  # This generates warnings
+  # This generates warnings with older perls
   open(FH, '>:encoding(UTF-16LE):via(File::BOM)', $filename)
-
-This glitch may be resolved in future versions of File::BOM, or future versions
-of PerlIO::via.
 
 =head2 Seeking
 
@@ -503,16 +506,24 @@ BOM being applied to the position parameter. Thus:
   # Seek to end of BOM (not start of file!)
   seek(FILE_BOM_HANDLE, 0, SEEK_SET)
 
-Versions previous to 0.07 do not support seeking at all.
+=head2 Telling
+
+In order to work correctly with seek(), tell() also returns a postion adjusted
+by the length of the BOM.
 
 =cut
 
-sub PUSHED { bless({}, $_[0]) || -1 }
+sub PUSHED { bless({offset => 0}, $_[0]) || -1 }
 
 sub UTF8 {
   # This doesn't seem to work as advertised, at present.
 
-  return 0;
+  if ($] >= 5.008007) {
+    return 1;
+  }
+  else {
+    return 0;
+  }
 }
 
 sub FILL {
@@ -545,7 +556,9 @@ sub WRITE {
     $self->{wrote_bom} = 1;
   }
 
-  $buf = decode_utf8($buf, 1) unless Encode::is_utf8($buf, 1);
+  # Buggy in older Encode modules.
+  # $buf = decode_utf8($buf, 1) unless is_utf8($buf, 1);
+  $buf = decode('UTF-8', $buf, FB_CROAK) unless is_utf8($buf, 1);
 
   print $fh $buf;
 
@@ -559,16 +572,16 @@ sub SEEK {
 
   my($pos, $whence, $fh) = @_;
 
-  if ($self->{offset} and $whence == SEEK_SET) {
-    $pos += $self->{offset};
-  }
+  $pos += $self->{offset} if $whence == SEEK_SET;
 
-  if (seek($fh, $pos, $whence)) {
-    return 0;
-  }
-  else {
-    return -1;
-  }
+  if (seek($fh, $pos, $whence)) { return 0  }
+  else				{ return -1 }
+}
+
+sub TELL {
+  my($self, $fh) = @_;
+
+  return tell($fh) - $self->{offset};
 }
 
 1;
@@ -589,7 +602,7 @@ __END__
 
 =head1 DIAGNOSTICS
 
-The following exceptions are raised via croak():
+The following exceptions are raised via croak()
 
 =over 4
 
@@ -597,7 +610,7 @@ The following exceptions are raised via croak():
 
 open_bom() couldn't open the given file for reading
 
-=item * Could't set binmode of handle opened on '<filname>' to '<mode>': $!
+=item * Couldn't set binmode of handle opened on '<filname>' to '<mode>': $!
 
 open_bom() couldn't set the binmode of the handle
 
@@ -630,7 +643,7 @@ unseekable.
 
 =head1 BUGS
 
-The PerlIO::via interface has a few problems with writing, see above.
+Older versions of PerlIO::via have a few problems with writing, see above.
 
 Under windows, warnings may be generated when using the PerlIO::via interface to
 read UTF-16LE and UTF-32LE encoded files. This seems to be a bug in the relevant
@@ -639,4 +652,6 @@ encoding(...) layers provided by L<Encode>.
 =head1 AUTHOR
 
 Matt Lawrence E<lt>mattlaw@cpan.orgE<gt>
+
+With thanks to Mark Fowler and Steve Purkis for additional tests.
 

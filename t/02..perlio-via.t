@@ -19,7 +19,11 @@ our %should_be = (
  'UTF-32LE' => "\x{ff}\x{fe}\x{0}\x{0}m\x{0}\x{0}\x{0}\x{f8}\x{0}\x{0}\x{0}\x{f8}\x{0}\x{0}\x{0}s\x{0}\x{0}\x{0}e\x{0}\x{0}\x{0}& \x{0}\x{0}",
 );
 
-plan tests => 2 * @test_files + 6 * keys(%enc2bom) + keys(%should_be) + 1;
+plan tests => 2 * @test_files + 6 * keys(%enc2bom) + keys(%should_be) + 2;
+
+# Work around bug in older PerlIO::via
+# The PerlIO::via version number was not incremented when the bug was fixed.
+my $compat = $] >= 5.008007 ? '' : ':utf8';
 
 for my $test_file (@test_files) {
   ok(
@@ -35,7 +39,7 @@ for my $test_file (@test_files) {
 for my $enc (sort keys %enc2bom) {
   my $file = "test_file-$enc.txt";
   ok(
-    open(BOM_OUT, ">:encoding($enc):via(File::BOM):utf8", $file),
+    open(BOM_OUT, ">:encoding($enc):via(File::BOM)$compat", $file),
     "Opened file for writing $enc via layer"
   ) or diag "$file: $!";
 
@@ -95,7 +99,7 @@ for my $enc (sort keys %enc2bom) {
 
   for my $enc (keys %should_be) {
     my $file = "moose-$enc.txt";
-    open(FH, ">:encoding($enc):via(File::BOM):utf8", $file) or die "Can't write to $file: $!\n";
+    open(FH, ">:encoding($enc):via(File::BOM)$compat", $file) or die "Can't write to $file: $!\n";
     print FH $moose;
     close FH;
 
@@ -119,13 +123,18 @@ for my $enc (sort keys %enc2bom) {
   my $file = 't/data/utf8_data.csv';
   open(my $fh, '<:via(File::BOM)', $file) or die "Can't read $file\n";
 
-  my $orig = join("\n", <$fh>);
+  my $first_line = <$fh>;
+  my $pos = tell($fh);
+  my $rest = join('', <$fh>);
 
   seek($fh, 0, 0) or die "Couldn't seek: $!";
 
-  my $new = join("\n", <$fh>);
+  my $new_first_line = <$fh>;
+  seek($fh, $pos, 0) or die "Couldn't seek: $!";
+  my $new_rest = join('', <$fh>);
 
-  is($new, $orig, "seek() works");
+  is($first_line, $new_first_line, "seek() works");
+  is($rest,	  $new_rest,	   "tell() works");
 }
 
 sub reasciify {
