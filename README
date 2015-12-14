@@ -68,23 +68,33 @@ EXPORTS
     Nothing by default.
 
   symbols
-    * open_bom()
-    * defuse()
-    * decode_from_bom()
-    * get_encoding_from_filehandle()
-    * get_encoding_from_stream()
-    * get_encoding_from_bom()
-    * %bom2enc
-    * %enc2bom
+    *   open_bom()
+
+    *   defuse()
+
+    *   decode_from_bom()
+
+    *   get_encoding_from_filehandle()
+
+    *   get_encoding_from_stream()
+
+    *   get_encoding_from_bom()
+
+    *   %bom2enc
+
+    *   %enc2bom
 
   tags
-    * :all
+    *   :all
+
         All of the above
 
-    * :subs
+    *   :subs
+
         subroutines only
 
-    * :vars
+    *   :vars
+
         just %bom2enc and %enc2bom
 
 VARIABLES
@@ -301,34 +311,44 @@ PerlIO::via interface
     adjusted by the length of the BOM.
 
 SEE ALSO
-    * Encode
-    * Encode::Unicode
-    * <http://www.unicode.org/unicode/faq/utf_bom.html#BOM>
+    *   Encode
+
+    *   Encode::Unicode
+
+    *   <http://www.unicode.org/unicode/faq/utf_bom.html#BOM>
 
 DIAGNOSTICS
     The following exceptions are raised via croak()
 
-    * Couldn't read '<filename>': $!
+    *   Couldn't read '<filename>': $!
+
         open_bom() couldn't open the given file for reading
 
-    * Couldn't set binmode of handle opened on '<filename>' to '<mode>': $!
+    *   Couldn't set binmode of handle opened on '<filename>' to '<mode>':
+        $!
+
         open_bom() couldn't set the binmode of the handle
 
-    * No string
+    *   No string
+
         decode_from_bom called on an undefined value
 
-    * Unseekable handle: $!
+    *   Unseekable handle: $!
+
         get_encoding_from_filehandle() or open_bom() called on an unseekable
         file or handle in scalar context.
 
-    * Couldn't read from handle: $!
+    *   Couldn't read from handle: $!
+
         _get_encoding_seekable() couldn't read the handle. This function is
         called from get_encoding_from_filehandle(), defuse() and open_bom()
 
-    * Couldn't reset read position: $!
+    *   Couldn't reset read position: $!
+
         _get_encoding_seekable couldn't seek to the position after the BOM.
 
-    * Couldn't read byte: $!
+    *   Couldn't read byte: $!
+
         get_encoding_from_stream couldn't read from the handle. This
         function is called from get_encoding_from_filehandle() and
         open_bom() when the handle or file is unseekable.

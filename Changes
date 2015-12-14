@@ -1,5 +1,8 @@
 File::BOM changes document
 
+0.15 - Mon Dec 14 2015
+    - Fix spelling errors spotted by debian team. Thanks to Gregor Herrmann.
+
 0.14 - Wed Oct 4 2006
     - More workarounds for platforms with odd read() behaviour.
 

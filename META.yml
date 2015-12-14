@@ -1,25 +1,28 @@
 ---
-name: File-BOM
-version: 0.14
+abstract: 'Utilities for handling Byte Order Marks'
 author:
   - 'Matt Lawrence E<lt>mattlaw@cpan.orgE<gt>'
-abstract: Utilities for handling Byte Order Marks
-license: perl
-resources:
-  license: http://dev.perl.org/licenses/
-requires:
-  Encode: 1.99
-  Readonly: 0.06
-  perl: 5.8.3
 build_requires:
-  Module::Build: 0.20
-  Test::Exception: 0.20
-  Test::More: 0.10
+  Module::Build: '0.20'
+  Test::Exception: '0.20'
+  Test::More: '0.10'
+configure_requires:
+  Module::Build: '0.42'
+dynamic_config: 1
+generated_by: 'Module::Build version 0.4212, CPAN::Meta::Converter version 2.150001'
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: File-BOM
 provides:
   File::BOM:
     file: lib/File/BOM.pm
-    version: 0.14
-generated_by: Module::Build version 0.28
-meta-spec:
-  url: http://module-build.sourceforge.net/META-spec-v1.2.html
-  version: 1.2
+    version: '0.15'
+requires:
+  Encode: '1.99'
+  Readonly: '0.06'
+  perl: v5.8.3
+resources:
+  license: http://dev.perl.org/licenses/
+version: '0.15'
