@@ -101,7 +101,7 @@ my @subs = qw(
 
 my @vars = qw( %bom2enc %enc2bom );
 
-our $VERSION = '0.13';
+our $VERSION = '0.14';
 
 our @EXPORT = ();
 our @EXPORT_OK = ( @subs, @vars );
@@ -442,8 +442,12 @@ sub get_encoding_from_stream (*) {
 sub _get_encoding_seekable (*) {
     my $fh = shift;
 
-    defined(read($fh, my $bom, $MAX_BOM_LENGTH))
-	or croak "Couldn't read from handle: $!";
+    # This doesn't work on all platforms:
+    # defined(read($fh, my $bom, $MAX_BOM_LENGTH))
+        # or croak "Couldn't read from handle: $!";
+
+    my $bom = eval { _safe_read($fh, $MAX_BOM_LENGTH) };
+    croak "Couldn't read from handle: $@" if $@;
 
     my($enc, $off) = get_encoding_from_bom($bom);
 
@@ -460,11 +464,9 @@ sub _get_encoding_unseekable (*) {
 
     my $so_far = '';
     for my $c (1 .. $MAX_BOM_LENGTH) {
-        # read is supposed to return undef on error, but on some platforms it
-        # seems to just return 0 and set $!
-        local $!;
-        my $status = read $fh, my $byte, 1;
-        if (!$status && $!) { croak "Couldn't read byte: $!" }
+        # defined(read($fh, my $byte, 1)) or croak "Couldn't read byte: $!";
+        my $byte = eval { _safe_read($fh, 1) };
+        croak "Couldn't read byte: $@" if $@;
 
 	$so_far .= $byte;
 
@@ -482,7 +484,10 @@ sub _get_encoding_unseekable (*) {
 	    if (my $enc = $bom2enc{$so_far}) {
 		my $char_length = _get_char_length($enc, $spill);
 
-		read($fh, my $extra, $char_length - length $spill);
+                my $extra = eval {
+                    _safe_read($fh, $char_length - length $spill);
+                };
+                croak "Coudln't read byte: $@" if $@;
 		$spill .= $extra;
 
 		return ($enc, $spill);
@@ -493,6 +498,19 @@ sub _get_encoding_unseekable (*) {
 	    }
 	}
     }
+}
+
+sub _safe_read {
+    my ($fh, $count) = @_;
+
+    # read is supposed to return undef on error, but on some platforms it
+    # seems to just return 0 and set $!
+    local $!;
+    my $status = read($fh, my $out, $count);
+
+    die $! if !$status && $!;
+
+    return $out;
 }
 
 =head2 get_encoding_from_bom

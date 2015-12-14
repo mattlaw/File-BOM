@@ -1,6 +1,6 @@
 ---
 name: File-BOM
-version: 0.13
+version: 0.14
 author:
   - 'Matt Lawrence E<lt>mattlaw@cpan.orgE<gt>'
 abstract: Utilities for handling Byte Order Marks
@@ -18,7 +18,7 @@ build_requires:
 provides:
   File::BOM:
     file: lib/File/BOM.pm
-    version: 0.13
+    version: 0.14
 generated_by: Module::Build version 0.28
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.2.html

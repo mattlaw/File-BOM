@@ -1,5 +1,8 @@
 File::BOM changes document
 
+0.14 - Wed Oct 4 2006
+    - More workarounds for platforms with odd read() behaviour.
+
 0.13 - Tue Oct 3 2006
     - Tried to workaround platforms where read doesn't return undef on failure.
     - Added Encode to dependencies so that the version number can be seen in
