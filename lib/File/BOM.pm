@@ -14,6 +14,12 @@ File::BOM - Utilities for reading Byte Order Marks
   *FH = open_bom($file)
   *FH = open_bom($file, ':utf8') # the same but with a default encoding
 
+  # get encoding too
+  (*FH, $encoding) = open_bom($file, ':utf8');
+
+  # open a potentially unseekable file:
+  (*FH, $encoding, $spillage) = open_bom($file, ':utf8', 1);
+
   # slurp an encoded file
   my $text = eval {
     local $/ = undef;
@@ -72,7 +78,7 @@ my @subs = qw(
 
 my @vars = qw( %bom2enc %enc2bom );
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 our @EXPORT = ();
 our @EXPORT_OK = ( @subs, @vars );
@@ -137,7 +143,7 @@ UTF-32BE and UTF-32LE
 A reverse-lookup hash for bom2enc, with a few aliases used in L<Encode>, namely utf8, iso-10646-1 and UCS-2.
 
 Note that UTF-16, UTF-32 and UCS-4 are not included in this hash. Mainly
-because Encode::encode automatically puts BOMs on output.
+because Encode::encode automatically puts BOMs on output. See L<Encode::Unicode>
 
 =cut
 
@@ -174,7 +180,7 @@ for my $enc (keys %enc2bom) {
 
   *FH = open_bom($name, $default_mode, $try_unseekable)
 
-  (*FH, $encoding) = open_bom($name, $default_mode, $try_unseekable)
+  (*FH, $encoding, $spill) = open_bom($name, $default_mode, $try_unseekable)
 
 opens $name for reading, setting the mode to the appropriate encoding for the
 BOM stored in the file.
@@ -189,13 +195,24 @@ that file, or as a UTF-8 file if none is found.
 If no default mode is specified and no BOM is found, the filehandle is opened
 using :bytes
 
-The filehandle will be cued up to read after the BOM. Unseekable files (e.g. sockets) will cause croaking, unless $try_unseekable is set (see get_encoding_from_filehandle for details)
-
 croaks on errors, returns the filehandle in scalar context or the filehandle
 and the encoding in list context.
 
-It is not recommended to use this function on any file which you know will not
-be rewindable, see the caveat for get_encoding_from_filehandle for details.
+The filehandle will be cued up to read after the BOM. Unseekable files (e.g.
+sockets) will cause croaking, unless $try_unseekable is set in which case any
+spillage is returned after the encoding (in scalar context the spillage is
+lost!)
+
+  e.g.
+
+  # croak if my_socket is unseekable
+  *FH = open_bom('my_socket')
+
+  # keep spillage if my_socket is unseekable
+  (*FH, $encoding, $spillage) = open_bom('my_socket', undef, 1);
+
+  # discard spillage is my_socket is unseekable - not recommended
+  *FH = open_bom('my_socket', undef, 1);
 
 =cut
 
@@ -203,12 +220,20 @@ sub open_bom ($;$) {
   my($filename, $mode, $try) = @_;
 
   my $fh = gensym();
+  my $spill = '';
   my $enc;
 
   open($fh, '<:bytes', $filename)
       or croak "Couldn't read '$filename': $!";
 
-  if ($enc = get_encoding_from_filehandle($fh, $try)) {
+  if ($try) {
+    ($enc, $spill) = get_encoding_from_filehandle($fh);
+  }
+  else {
+    $enc = get_encoding_from_filehandle($fh);
+  }
+
+  if ($enc) {
     $mode = ":encoding($enc)";
   }
 
@@ -218,7 +243,7 @@ sub open_bom ($;$) {
     );
   }
 
-  return wantarray ? ($fh, $enc) : $fh;
+  return wantarray ? ($fh, $enc, $spill) : $fh;
 }
 
 =head2 decode_from_bom()
@@ -258,36 +283,33 @@ sub decode_from_bom {
 
 =head2 get_encoding_from_filehandle
 
-  $encoding = get_encoding_from_filehandle(HANDLE, $try_unseekable)
+  $encoding = get_encoding_from_filehandle(HANDLE)
+
+  ($encoding, $spillage) = get_encosing_from_filehandle(HANDLE)
 
 Returns the encoding found in the given filehandle.
 
-The handle should be opened in a non-unicode way, so that the BOM can be read
-in it's natural state.
+The handle should be opened in a non-unicode way (e.g. mode '<:bytes') so that
+the BOM can be read in its natural state.
 
 After calling, the handle will be set to read at a point after the BOM (or at
 the beginning of the file if no BOM was found)
 
-If called on an unseekable filehandle, the default behaviour is to croak, but if
-$try_unseekable is set to true, it will fall back to byte-by-byte reading (like
-get_encoding_from_stream) but silently discard any read bytes.
+If called in scalar context, unseekable handles cause a croak().
 
-This function will work on unseekable filehandles if there is definitely a BOM
-ready for reading on the handle. Otherwise one or more bytes will be silently
-discarded!!
-
-For safer reading of unseekable handles use get_encoding_from_stream.
+If called in list context, unseekable handles will be read byte-by-byte and any
+spillage will be returned. See L<get_encoding_from_stream>
 
 =cut
 
-sub get_encoding_from_filehandle (*;$) {
+sub get_encoding_from_filehandle (*) {
   my $fh = shift;
 
   if (seek($fh, 0, SEEK_SET)) {
     return _get_encoding_seekable($fh);
   }
-  elsif ($_[0]) {
-    return (_get_encoding_unseekable($fh))[0];
+  elsif (wantarray) {
+    return _get_encoding_unseekable($fh);
   }
   else {
     croak $!;
@@ -301,6 +323,9 @@ sub get_encoding_from_filehandle (*;$) {
 Read a BOM from an unrewindable source. This means reading the stream one byte
 at a time until either a BOM is found or every possible BOM is ruled out. Any
 non-BOM characters read from the handle will be returned in $spillage.
+
+This function is less efficient than get_encoding_from_filehandle, but should
+work just as well on a seekable handle as on an unseekable one.
 
 =cut
 
@@ -421,24 +446,25 @@ sub PUSHED { bless({}, $_[0]) }
 sub FILL {
   my($self, $fh) = @_;
 
-  my $line = <$fh>;
+  my $line;
   if (not defined $self->{enc}) {
-    ($self->{enc}, my $off) = get_encoding_from_bom($line);
-    $line = substr($line, $off);
-  }
+    ($self->{enc}, $line) = get_encoding_from_filehandle($fh);
 
-  if ($self->{enc} eq '') {
-    return $line;
+    if ($self->{enc} ne '') { binmode($fh, ":encoding($self->{enc})") }
+
+    $line .= <$fh>;
   }
   else {
-    return decode($self->{enc}, $line);
+    $line = <$fh>;
   }
+
+  return $line;
 }
 
 sub WRITE {
   my($self, $buf, $fh) = @_;
 
-  unless ($self->{wrote_bom}) {
+  if (tell $fh == 0 and not $self->{wrote_bom}) {
     print $fh "\x{feff}";
     $self->{wrote_bom} = 1;
   }
@@ -449,6 +475,18 @@ sub WRITE {
 1;
 
 __END__
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<Encode>
+
+=item * L<Encode::Unicode>
+
+=item * L<http://www.unicode.org/unicode/faq/utf_bom.html#BOM>
+
+=back
 
 =head1 ERROR HANDLING
 
@@ -461,5 +499,5 @@ None known.
 
 =head1 AUTHOR
 
-Matt Lawrence E<lt>mattlaw@eudoramail.comE<gt>
+Matt Lawrence E<lt>mattlaw@cpan.orgE<gt>
 

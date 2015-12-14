@@ -11,9 +11,11 @@ use Test::Framework;
 use Encode;
 use Fcntl qw( :seek );
 
-plan tests => 1 + ( @test_files * 8);
+BEGIN {
+  plan tests => 1 + ( @test_files * 8);
 
-use_ok("File::BOM", ':all');
+  use_ok("File::BOM", ':all');
+}
 
 for my $file (@test_files) {
   ok(*FH = open_bom($file2path{$file}), "$file: open_bom returned filehandle");
@@ -50,17 +52,9 @@ for my $file (@test_files) {
 
   is($enc, $file2enc{$file}, "$file: get_encoding_from_stream()");
 
-  # diag("enc: '$enc'\nspill: '$spill'");
-
   $line = $spill . $line;
 
-  # diag("BEFORE: ". join(' ', map {sprintf("%02X", $_)} unpack("C*", $line)));
-  
   $line = decode($enc, $line) if $enc;
-
-  # diag("AFTER:  ". join(' ', map {sprintf("%02X", $_)} unpack("C*", $line)));
-  
-  # diag("after decode:  '$line'");
 
   is($line, 'some text', "$file: read OK after get_encoding_from_stream");
 

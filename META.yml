@@ -1,15 +1,17 @@
 --- #YAML:1.0
 name: File-BOM
-version: 0.04
+version: 0.05
 author:
-  - Matt Lawrence E<lt>mattlaw@eudoramail.comE<gt>
+  - Matt Lawrence E<lt>mattlaw@cpan.orgE<gt>
 abstract: Utilities for reading Byte Order Marks
 license: perl
+requires:
+  perl: 5.8.0
 build_requires:
   Module::Build: 0.20
   Test::More: 0.01
 provides:
   File::BOM:
     file: lib/File/BOM.pm
-    version: 0.04
+    version: 0.05
 generated_by: Module::Build version 0.23
