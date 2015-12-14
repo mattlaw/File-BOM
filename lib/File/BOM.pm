@@ -78,7 +78,7 @@ my @subs = qw(
 
 my @vars = qw( %bom2enc %enc2bom );
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 our @EXPORT = ();
 our @EXPORT_OK = ( @subs, @vars );
@@ -216,7 +216,7 @@ lost!)
 
 =cut
 
-sub open_bom ($;$) {
+sub open_bom ($;$$) {
   my($filename, $mode, $try) = @_;
 
   my $fh = gensym();
@@ -266,7 +266,7 @@ See L<Encode>
 
 =cut
 
-sub decode_from_bom {
+sub decode_from_bom ($;$$) {
   my($string, $default, $check) = @_;
 
   croak "No string" unless defined $string;
@@ -298,7 +298,7 @@ the beginning of the file if no BOM was found)
 If called in scalar context, unseekable handles cause a croak().
 
 If called in list context, unseekable handles will be read byte-by-byte and any
-spillage will be returned. See L<get_encoding_from_stream>
+spillage will be returned. See get_encoding_from_stream()
 
 =cut
 
@@ -397,14 +397,20 @@ To get the data from the string, the following should work:
 
 =cut
 
+sub bom_regex () {
+  my @bombs = sort { length $b <=> length $a } keys %bom2enc;
+  local $" = '|';
+
+  return qr/^(@bombs)/;
+}
+
 sub get_encoding_from_bom ($) {
   my $bom = shift || $_;
 
   my $encoding = '';
   my $offset = 0;
 
-  my $bombs = join('|', sort {length $b <=> length $a} keys %bom2enc);
-  if (my($found) = $bom =~ /^($bombs)/) {
+  if (my($found) = $bom =~ bom_regex) {
     use bytes; # make sure we count bytes in length()
     $encoding = $bom2enc{$found};
     $offset = length($found);
@@ -450,6 +456,16 @@ when the via(File::BOM) layer doesn't receive utf8 on writing.
 This glitch may be resolved in future versions of File::BOM, or future versions
 of PerlIO::via.
 
+=head2 Seeking
+
+Seeking with SEEK_SET results in an offset equal to the length of any detected
+BOM being applied to the position parameter. Thus:
+
+  # Seek to end of BOM (not start of file!)
+  seek(FILE_BOM_HANDLE, 0, SEEK_SET)
+
+Versions previous to 0.07 do not support seeking at all.
+
 =cut
 
 sub PUSHED { bless({}, $_[0]) || -1 }
@@ -467,7 +483,11 @@ sub FILL {
   if (not defined $self->{enc}) {
     ($self->{enc}, $line) = get_encoding_from_filehandle($fh);
 
-    if ($self->{enc} ne '') { binmode($fh, ":encoding($self->{enc})") }
+    if ($self->{enc} ne '') {
+      binmode($fh, ":encoding($self->{enc})");
+
+      $self->{offset} = length $enc2bom{$self->{enc}};
+    }
 
     $line .= <$fh>;
   }
@@ -494,6 +514,23 @@ sub WRITE {
 }
 
 sub FLUSH { 0 }
+
+sub SEEK {
+  my $self = shift;
+
+  my($pos, $whence, $fh) = @_;
+
+  if ($self->{offset} and $whence == SEEK_SET) {
+    $pos += $self->{offset};
+  }
+
+  if (seek($fh, $pos, $whence)) {
+    return 0;
+  }
+  else {
+    return -1;
+  }
+}
 
 1;
 
