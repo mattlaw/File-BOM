@@ -66,14 +66,13 @@ File::BOM - Utilities for handling Byte Order Marks
 use strict;
 use warnings;
 
-# We don't want any character semantics
+# We don't want any character semantics at all
 use bytes;
 
 use base qw( Exporter );
 
 use Readonly;
 
-use List::Util	qw( max );
 use Carp	qw( croak );
 use Fcntl	qw( :seek );
 use Encode	qw( :DEFAULT :fallbacks is_utf8 );
@@ -90,7 +89,7 @@ my @subs = qw(
 
 my @vars = qw( %bom2enc %enc2bom );
 
-our $VERSION = '0.10';
+our $VERSION = '0.11';
 
 our @EXPORT = ();
 our @EXPORT_OK = ( @subs, @vars );
@@ -194,12 +193,11 @@ Readonly %enc2bom => (
     );
 
 {
-
     local $" = '|';
 
-    Readonly $MAX_BOM_LENGTH => max( map { length } keys %bom2enc );
-
     my @bombs = sort { length $b <=> length $a } keys %bom2enc;
+
+    Readonly $MAX_BOM_LENGTH => length $bombs[0];
 
     Readonly $bom_re => qr/^(@bombs)/o;
 }
@@ -605,7 +603,7 @@ by the length of the BOM.
 
 =cut
 
-sub PUSHED { bless({offset => 0, buffer => ''}, $_[0]) || -1 }
+sub PUSHED { bless({offset => 0}, $_[0]) || -1 }
 
 sub UTF8 {
   # There is a bug with this method previous to 5.8.7

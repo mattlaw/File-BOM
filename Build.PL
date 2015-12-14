@@ -6,15 +6,15 @@ Build.PL - Build script generator for File::BOM
 
 =head1 SYNOPSIS
 
- perl Build.PL
- ./Build test
- ./Build install
+    perl Build.PL
+    ./Build test
+    ./Build install
 
 or
 
-  perl Makefile.PL
-  make test
-  make install
+    perl Makefile.PL
+    make test
+    make install
 
 =cut
 
@@ -26,21 +26,21 @@ use warnings;
 use Module::Build;
 
 my $build = Module::Build->new (
-   module_name        => 'File::BOM',
-   dist_version_from  => 'lib/File/BOM.pm',
-   create_readme      => 1,
-   create_makefile_pl => 'passthrough',
-   license            => 'perl',
-   requires	      => {
-	    perl     => '5.8.3',
-	    Readonly => '0.06',
-       },
-   build_requires     => {
-	 'Test::More'    => '0.01',
-	 'Test::Exception' => '0.20',
-	 'Module::Build' => '0.20',
-       },
-  );
+    module_name        => 'File::BOM',
+    dist_version_from  => 'lib/File/BOM.pm',
+    create_readme      => 1,
+    create_makefile_pl => 'passthrough',
+    license            => 'perl',
+    requires	      => {
+        'perl'     => '5.8.3',
+        'Readonly' => '0.06',
+    },
+    build_requires => {
+        'Test::More'      => '0.01',
+        'Test::Exception' => '0.20',
+        'Module::Build'   => '0.20',
+    },
+);
 
 $build->create_build_script;
 
