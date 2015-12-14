@@ -1,5 +1,10 @@
 File::BOM changes document
 
+0.13 - Tue Oct 3 2006
+    - Tried to workaround platforms where read doesn't return undef on failure.
+    - Added Encode to dependencies so that the version number can be seen in
+      test reports.
+
 0.12 - Tue Jul 11 2006
     - Added a description section to docs
     - Added information about test failures on cygwin

@@ -34,9 +34,10 @@ my $build = Module::Build->new (
     requires	      => {
         'perl'     => '5.8.3',
         'Readonly' => '0.06',
+        'Encode'   => '1.99', # This shipped with perl 5.8.3
     },
     build_requires => {
-        'Test::More'      => '0.01',
+        'Test::More'      => '0.10',
         'Test::Exception' => '0.20',
         'Module::Build'   => '0.20',
     },

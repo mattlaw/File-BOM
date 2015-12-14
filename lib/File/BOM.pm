@@ -101,7 +101,7 @@ my @subs = qw(
 
 my @vars = qw( %bom2enc %enc2bom );
 
-our $VERSION = '0.12';
+our $VERSION = '0.13';
 
 our @EXPORT = ();
 our @EXPORT_OK = ( @subs, @vars );
@@ -460,7 +460,11 @@ sub _get_encoding_unseekable (*) {
 
     my $so_far = '';
     for my $c (1 .. $MAX_BOM_LENGTH) {
-	defined(read($fh, my $byte, 1)) or croak "Couldn't read byte: $!";
+        # read is supposed to return undef on error, but on some platforms it
+        # seems to just return 0 and set $!
+        local $!;
+        my $status = read $fh, my $byte, 1;
+        if (!$status && $!) { croak "Couldn't read byte: $!" }
 
 	$so_far .= $byte;
 
