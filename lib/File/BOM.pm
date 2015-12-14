@@ -20,7 +20,7 @@ File::BOM - Utilities for reading Byte Order Marks
   }
 
   # read BOM encoding from filehandle:
-  open FH, '<:raw', $some_file;
+  open FH, '<:bytes', $some_file;
   $encoding = get_encoding_from_filehandle(*FH)
 
   # get encoding and BOM length from BOM at start of string:
@@ -33,6 +33,11 @@ File::BOM - Utilities for reading Byte Order Marks
   $enc = $bom2enc{$bom}
   
 =cut
+
+use 5.008;
+
+use strict;
+use warnings;
 
 use base qw( Exporter );
 
@@ -52,7 +57,7 @@ my @subs = qw(
 
 my @vars = qw( %bom2enc %enc2bom );
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 our @EXPORT = ();
 our @EXPORT_OK = ( @subs, @vars );
@@ -123,6 +128,7 @@ because Encode::encode automatically puts BOMs on output.
 
 our(%bom2enc, %enc2bom, $MAX_BOM_LENGTH);
 
+$MAX_BOM_LENGTH = 4;
 %bom2enc = map { encode($_, "\x{feff}") => $_ } qw(
       UTF-8
       UTF-16BE
@@ -137,19 +143,23 @@ our(%bom2enc, %enc2bom, $MAX_BOM_LENGTH);
       utf8
     ));
 
+# verify $MAX_BOM_LENGTH -- better safe than sorry 
 for my $enc (keys %enc2bom) {
   use bytes;
 
   my $bom = $enc2bom{$enc};
-  my $len = length $bom;
+  my $len = length $bom || 0;
+
   $MAX_BOM_LENGTH = $len if $len > $MAX_BOM_LENGTH;
 }
 
 =head1 FUNCTIONS
 
-=head2 *FH = open_bom($name, $default_mode, $try_unseekable)
+=head2 open_bom
 
-=head2 (*FH, $encoding) = open_bom($name, $default_mode)
+  *FH = open_bom($name, $default_mode, $try_unseekable)
+
+  (*FH, $encoding) = open_bom($name, $default_mode, $try_unseekable)
 
 opens $name for reading, setting the mode to the appropriate encoding for the
 BOM stored in the file.
@@ -162,7 +172,7 @@ Opens my_file.txt for reading in an appropriate encoding found from the BOM in
 that file, or as a UTF-8 file if none is found.
 
 If no default mode is specified and no BOM is found, the filehandle is opened
-using :raw
+using :bytes
 
 The filehandle will be cued up to read after the BOM. Unseekable files (e.g. sockets) will cause croaking, unless $try_unseekable is set (see get_encoding_from_filehandle for details)
 
@@ -178,11 +188,12 @@ sub open_bom ($;$) {
   my($filename, $mode, $try) = @_;
 
   my $fh = gensym();
+  my $enc;
 
-  open($fh, '<:raw', $filename)
+  open($fh, '<:bytes', $filename)
       or croak "Couldn't read '$filename': $!";
 
-  if (my $enc = get_encoding_from_filehandle($fh, $try)) {
+  if ($enc = get_encoding_from_filehandle($fh, $try)) {
     $mode = ":encoding($enc)";
   }
 
@@ -192,7 +203,7 @@ sub open_bom ($;$) {
     );
   }
 
-  return wantarray ? ($fh, $encoding) : $fh;
+  return wantarray ? ($fh, $enc) : $fh;
 }
 
 =head2 decode_from_bom()
@@ -230,7 +241,9 @@ sub decode_from_bom {
   return wantarray ? ($out, $enc) : $out;
 }
 
-=head2 $encoding = get_encoding_from_filehandle(HANDLE, $try_unseekable)
+=head2 get_encoding_from_filehandle
+
+  $encoding = get_encoding_from_filehandle(HANDLE, $try_unseekable)
 
 Returns the encoding found in the given filehandle.
 
@@ -266,7 +279,9 @@ sub get_encoding_from_filehandle (*;$) {
   }
 }
 
-=head2 ($encoding, $spillage) = get_encoding_from_stream(*FH);
+=head2 get_encoding_from_stream
+
+  ($encoding, $spillage) = get_encoding_from_stream(*FH);
 
 Read a BOM from an unrewindable source. This means reading the stream one byte
 at a time until either a BOM is found or every possible BOM is ruled out. Any
@@ -316,7 +331,9 @@ sub _get_encoding_unseekable (*) {
   }
 }
 
-=head2 ($encoding, $offset) = get_encoding_from_bom($string)
+=head2 get_encoding_from_bom
+
+  ($encoding, $offset) = get_encoding_from_bom($string)
 
 Returns the encoding and length in bytes of the BOM in $string.
 
