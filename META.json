@@ -37,7 +37,7 @@
    "provides" : {
       "File::BOM" : {
          "file" : "lib/File/BOM.pm",
-         "version" : "0.17"
+         "version" : "0.18"
       }
    },
    "release_status" : "stable",
@@ -51,7 +51,7 @@
       "x_type" : "git",
       "x_web" : "https://github.com/mattlaw/File-BOM"
    },
-   "version" : "0.17",
+   "version" : "0.18",
    "x_meta_spec" : {
       "version" : 2
    },
